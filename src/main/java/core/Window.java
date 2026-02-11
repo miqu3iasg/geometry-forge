@@ -23,20 +23,23 @@ public class Window {
 	private static final String WINDOW_TITLE = "Geometry Forge";
 
 	private long handle;
+	private Runnable renderCallback;
+	private Runnable initCallback;
+
+	public void setRenderCallback (Runnable callback) {
+		this.renderCallback = callback;
+	}
+
+	public void setInitCallback (Runnable callback) {
+		this.initCallback = callback;
+	}
 
 	public void run () {
 		log.info("LWJGL started {}.", Version.getVersion());
 
 		init();
 		loop();
-
-		glfwFreeCallbacks(handle);
-		glfwDestroyWindow(handle);
-
-		glfwTerminate();
-
-		glfwSetErrorCallback(null).free();
-
+		cleanup();
 	}
 
 	private void init () {
@@ -91,16 +94,40 @@ public class Window {
 		GL.createCapabilities();
 
 		// Set the clear color
-		glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
+		glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
+		glEnable(GL_DEPTH_TEST);
+
+		if (initCallback != null) {
+			initCallback.run();
+		}
 
 		// Run the rendering loop until the user has attempted to close
 		// the window or has pressed the ESCAPE key.
 		while (!glfwWindowShouldClose(handle)) {
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the framebuffer
 
+			if (renderCallback != null) {
+				renderCallback.run();
+			}
+
 			glfwSwapBuffers(handle); // swap the color buffers
 
 			glfwPollEvents();
 		}
+	}
+
+	private void cleanup () {
+		glfwFreeCallbacks(handle);
+		glfwDestroyWindow(handle);
+		glfwTerminate();
+		glfwSetErrorCallback(null).free();
+	}
+
+	public static int getWidth () {
+		return WINDOW_WIDTH;
+	}
+
+	public static int getHeight () {
+		return WINDOW_HEIGHT;
 	}
 }
