@@ -42,7 +42,7 @@ public class Main {
 	}
 
 	public void run () {
-		Window window = null;
+		Window window;
 
 		try {
 			System.out.println("Initializing window and rendering context");
@@ -114,11 +114,6 @@ public class Main {
 	private void render () {
 		try {
 			updateRotation();
-
-			// Debug: print every 60 frames (roughly once per second at 60fps)
-			if ((int)rotation % 60 == 0) {
-				System.out.println("Render called - rotation: " + rotation);
-			}
 
 			Matrix4f modelMatrix = createModelMatrix();
 
