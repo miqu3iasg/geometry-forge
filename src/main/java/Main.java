@@ -4,12 +4,8 @@ import geometry.Cube;
 import geometry.Mesh;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class Main {
-
-	private static final Logger logger = LoggerFactory.getLogger(Main.class);
 
 	private static final float FIELD_OF_VIEW = 45.0f;
 	private static final float NEAR_PLANE = 0.1f;
@@ -29,12 +25,18 @@ public class Main {
 	private Matrix4f projectionMatrix;
 	private Matrix4f viewMatrix;
 
+	private final Vector3f lightPos = new Vector3f(2.0f, 2.0f, 2.0f);
+	private final Vector3f viewPos = new Vector3f(0, 0, 3);
+	private final Vector3f lightColor = new Vector3f(1.0f, 1.0f, 1.0f); // white light
+	private final Vector3f objectColor = new Vector3f(0.2f, 0.6f, 1.0f); // blue
+
 	public static void main (String[] args) {
-		logger.info("Starting application...");
+		System.out.println("Starting application...");
 		try {
 			new Main().run();
 		} catch (Exception e) {
-			logger.error("Fatal error during application execution", e);
+			System.err.println("Fatal error during application execution: " + e.getMessage());
+			e.printStackTrace();
 			System.exit(1);
 		}
 	}
@@ -43,12 +45,12 @@ public class Main {
 		Window window = null;
 
 		try {
-			logger.info("Initializing window and rendering context");
+			System.out.println("Initializing window and rendering context");
 			window = new Window();
 
 			window.setInitCallback(() -> {
 				try {
-					logger.info("Initializing rendering resources");
+					System.out.println("Initializing rendering resources");
 
 					init();
 				} catch (Exception e) {
@@ -58,42 +60,41 @@ public class Main {
 
 			window.setRenderCallback(this::render);
 
-			logger.info("Starting main loop");
+			System.out.println("Starting main loop");
 			window.run();
 		} catch (Exception e) {
-			logger.error("Error during application runtime", e);
+			System.err.println("Error during application runtime: " + e.getMessage());
+			e.printStackTrace();
 			throw new RuntimeException("Application failed to run", e);
 		} finally {
-			logger.info("Cleaning up resources");
+			System.out.println("Cleaning up resources");
 			cleanup();
 		}
 	}
 
 	private void init () throws Exception {
 		try {
-			logger.debug("Creating shader program");
+			System.out.println("Creating shader program");
 			shader = new ShaderProgram();
 
-			logger.debug("Creating cube mesh");
+			System.out.println("Creating cube mesh");
 			cube = Cube.createMesh();
 
-			logger.debug(
-				"Setting up projection matrix (FOV: {}°, near: {}, far: {})",
-				FIELD_OF_VIEW,
-				NEAR_PLANE,
-				FAR_PLANE
+			System.out.println(
+				"Setting up projection matrix (FOV: " + FIELD_OF_VIEW + "°, near: " + NEAR_PLANE + ", far: " + FAR_PLANE + ")"
 			);
 
 			projectionMatrix = createProjectionMatrix();
 
-			logger.debug("Setting up view matrix (camera position: {})", CAMERA_POSITION);
+			System.out.println("Setting up view matrix (camera position: " + CAMERA_POSITION + ")");
 
 			viewMatrix = createViewMatrix();
 
-			logger.info("Rendering resources initialized successfully");
+			System.out.println("Rendering resources initialized successfully");
 
 		} catch (Exception e) {
-			logger.error("Failed to initialize rendering resources", e);
+			System.err.println("Failed to initialize rendering resources: " + e.getMessage());
+			e.printStackTrace();
 			cleanup(); // Ensure partial cleanup on failure
 			throw new RuntimeException("Initialization failed", e);
 		}
@@ -114,6 +115,11 @@ public class Main {
 		try {
 			updateRotation();
 
+			// Debug: print every 60 frames (roughly once per second at 60fps)
+			if ((int)rotation % 60 == 0) {
+				System.out.println("Render called - rotation: " + rotation);
+			}
+
 			Matrix4f modelMatrix = createModelMatrix();
 
 			bindShaderAndSetUniforms(modelMatrix);
@@ -121,7 +127,8 @@ public class Main {
 			cube.render();
 			shader.unbind();
 		} catch (Exception e) {
-			logger.error("Error during render frame", e);
+			System.err.println("Error during render frame: " + e.getMessage());
+			e.printStackTrace();
 		}
 	}
 
@@ -149,24 +156,30 @@ public class Main {
 		shader.setMatrix4f("view", viewMatrix);
 		shader.setMatrix4f("projection", projectionMatrix);
 		shader.setVector3f("color", CUBE_COLOR);
+
+		shader.setVector3f("objectColor", objectColor);
+		shader.setVector3f("lightColor", lightColor);
+		shader.setVector3f("lightPos", lightPos);
+		shader.setVector3f("viewPos", viewPos);
 	}
 
 	private void cleanup () {
 		try {
 			if (cube != null) {
-				logger.debug("Cleaning up cube mesh");
+				System.out.println("Cleaning up cube mesh");
 				cube.cleanup();
 			}
 
 			if (shader != null) {
-				logger.debug("Cleaning up shader program");
+				System.out.println("Cleaning up shader program");
 				shader.cleanup();
 			}
 
-			logger.info("Resource cleanup completed");
+			System.out.println("Resource cleanup completed");
 
 		} catch (Exception e) {
-			logger.error("Error during cleanup", e);
+			System.err.println("Error during cleanup: " + e.getMessage());
+			e.printStackTrace();
 		}
 	}
 }

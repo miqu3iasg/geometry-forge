@@ -16,8 +16,6 @@ import static org.lwjgl.system.MemoryStack.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
 public class Window {
-	private static final Logger log = LoggerFactory.getLogger(Window.class);
-
 	private static final int WINDOW_WIDTH = 800;
 	private static final int WINDOW_HEIGHT = 600;
 	private static final String WINDOW_TITLE = "Geometry Forge";
@@ -35,8 +33,6 @@ public class Window {
 	}
 
 	public void run () {
-		log.info("LWJGL started {}.", Version.getVersion());
-
 		init();
 		loop();
 		cleanup();
@@ -68,13 +64,10 @@ public class Window {
 			IntBuffer pWidth = stack.mallocInt(1);
 			IntBuffer pHeight = stack.mallocInt(1);
 
-			// Get the window size passed to glfwCreatedWindow
 			glfwGetWindowSize(handle, pWidth, pHeight);
 
-			// Get the resolution of the primary monitor
 			GLFWVidMode vidMode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 
-			// Center the window
 			glfwSetWindowPos(handle, (vidMode.width() - pWidth.get(0) / 2), (vidMode.height() - pHeight.get(0) / 2));
 
 			glfwMakeContextCurrent(handle);
@@ -93,7 +86,6 @@ public class Window {
 		// bindings available for use.
 		GL.createCapabilities();
 
-		// Set the clear color
 		glClearColor(0.1f, 0.1f, 0.12f, 1.0f);
 		glEnable(GL_DEPTH_TEST);
 
@@ -110,7 +102,7 @@ public class Window {
 				renderCallback.run();
 			}
 
-			glfwSwapBuffers(handle); // swap the color buffers
+			glfwSwapBuffers(handle);
 
 			glfwPollEvents();
 		}
