@@ -1,9 +1,14 @@
+import core.Camera;
 import core.ShaderProgram;
 import core.Window;
 import geometry.Cube;
+import geometry.Icosphere;
 import geometry.Mesh;
+import geometry.Shape;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
+
+import static org.lwjgl.opengl.GL11C.*;
 
 public class Main {
 
@@ -11,24 +16,38 @@ public class Main {
 	private static final float NEAR_PLANE = 0.1f;
 	private static final float FAR_PLANE = 100.0f;
 	private static final float ROTATION_SPEED = 0.5f;
-	private static final float SECONDARY_ROTATION_MULTIPLIER = 0.5f;
+	private static final Vector3f FIXED_LIGHT_POSITION = new Vector3f(8.0f, 8.0f, 5.0f);
+	private static final Vector3f WIREFRAME_COLOR = new Vector3f(0.1f, 0.1f, 0.15f);
 
-	private static final Vector3f CAMERA_POSITION = new Vector3f(0.0f, 0.0f, 3.0f);
-	private static final Vector3f CAMERA_TARGET = new Vector3f(0.0f, 0.0f, 0.0f);
-	private static final Vector3f CAMERA_UP = new Vector3f(0.0f, 1.0f, 0.0f);
+	private final static Vector3f LIGHT_COLOR = new Vector3f(1.0f, 1.0f, 1.0f); // white light
+	private final static Vector3f OBJECT_COLOR = new Vector3f(0.2f, 0.6f, 1.0f); // blue
 
-	private static final Vector3f CUBE_COLOR = new Vector3f(0.2f, 0.6f, 1.0f);
+	private static final int ICOSPHERE_SUBDIVISIONS = 3;
+
+	private Shape currentShape = Shape.ICOSPHERE;
+
+	// Camera configuration
+	private static final float CAMERA_INITIAL_RADIUS = 2.5f;
+	private static final float CAMERA_INITIAL_THETA = (float) Math.PI / 3;
+	private static final float CAMERA_INITIAL_PHI = (float) Math.PI / 4;
+	private static final float CAMERA_ROTATION_SENSITIVITY = 0.005f;
+	private static final float CAMERA_ZOOM_SENSITIVITY = 0.5f;
+
+
+	// Rotation axis vectors
+	private static final Vector3f CUBE_PRIMARY_ROTATION_AXIS = new Vector3f(1.0f, 0.5f, 0.0f).normalize();
+	private static final Vector3f CUBE_SECONDARY_ROTATION_AXIS = new Vector3f(0.0f, 1.0f, 0.0f);
+	private static final Vector3f SPHERE_ROTATION_AXIS = new Vector3f(0.0f, 1.0f, 0.0f);
+
+	// Rotation multipliers
+	private static final float CUBE_SECONDARY_ROTATION_MULTIPLIER = 0.5f;
 
 	private float rotation = 0.0f;
 	private ShaderProgram shader;
-	private Mesh cube;
+	private Mesh cubeMesh;
+	private Mesh sphereMesh;
 	private Matrix4f projectionMatrix;
-	private Matrix4f viewMatrix;
-
-	private final Vector3f lightPos = new Vector3f(2.0f, 2.0f, 2.0f);
-	private final Vector3f viewPos = new Vector3f(0, 0, 3);
-	private final Vector3f lightColor = new Vector3f(1.0f, 1.0f, 1.0f); // white light
-	private final Vector3f objectColor = new Vector3f(0.2f, 0.6f, 1.0f); // blue
+	private Camera camera;
 
 	public static void main (String[] args) {
 		System.out.println("Starting application...");
@@ -59,8 +78,12 @@ public class Main {
 			});
 
 			window.setRenderCallback(this::render);
+			window.setMouseMoveCallback(this::onMouseMove);
+			window.setMouseScrollCallback(this::onMouseScroll);
+			window.setKeyCallback(this::onKeyPress);
 
 			System.out.println("Starting main loop");
+			System.out.println("Controls: Left-click drag to rotate, scroll to zoom, SPACE to switch shapes");
 			window.run();
 		} catch (Exception e) {
 			System.err.println("Error during application runtime: " + e.getMessage());
@@ -78,24 +101,26 @@ public class Main {
 			shader = new ShaderProgram();
 
 			System.out.println("Creating cube mesh");
-			cube = Cube.createMesh();
+			cubeMesh = Cube.createMesh();
 
-			System.out.println(
-				"Setting up projection matrix (FOV: " + FIELD_OF_VIEW + "°, near: " + NEAR_PLANE + ", far: " + FAR_PLANE + ")"
-			);
+			System.out.println("Creating icosphere mesh (subdivisions: " + ICOSPHERE_SUBDIVISIONS + ")");
+			sphereMesh = Icosphere.createMesh(ICOSPHERE_SUBDIVISIONS);
 
+			System.out.println("Setting up camera");
+			camera = new Camera(CAMERA_INITIAL_RADIUS, CAMERA_INITIAL_THETA, CAMERA_INITIAL_PHI);
+
+			System.out.println("Setting up projection matrix (FOV: " + FIELD_OF_VIEW + "°, near: " + NEAR_PLANE + ", far: " + FAR_PLANE + ")");
 			projectionMatrix = createProjectionMatrix();
 
-			System.out.println("Setting up view matrix (camera position: " + CAMERA_POSITION + ")");
-
-			viewMatrix = createViewMatrix();
-
 			System.out.println("Rendering resources initialized successfully");
+			System.out.println("Current shape: " + currentShape);
 
 		} catch (Exception e) {
 			System.err.println("Failed to initialize rendering resources: " + e.getMessage());
 			e.printStackTrace();
-			cleanup(); // Ensure partial cleanup on failure
+
+			cleanup();
+
 			throw new RuntimeException("Initialization failed", e);
 		}
 	}
@@ -107,19 +132,22 @@ public class Main {
 		return new Matrix4f().perspective(fovRadians, aspectRatio, NEAR_PLANE, FAR_PLANE);
 	}
 
-	private Matrix4f createViewMatrix () {
-		return new Matrix4f().lookAt(CAMERA_POSITION, CAMERA_TARGET, CAMERA_UP);
-	}
-
 	private void render () {
 		try {
 			updateRotation();
 
 			Matrix4f modelMatrix = createModelMatrix();
+			Matrix4f viewMatrix = camera.getViewMatrix();
 
-			bindShaderAndSetUniforms(modelMatrix);
+			Vector3f lightPos = currentShape == Shape.CUBE ? camera.getPosition() : FIXED_LIGHT_POSITION;
+			Vector3f viewPos = camera.getPosition();
 
-			cube.render();
+			bindShaderAndSetUniforms(modelMatrix, viewMatrix, lightPos, viewPos);
+
+			getCurrentMesh().render();
+
+			renderWireframeOverlay();
+
 			shader.unbind();
 		} catch (Exception e) {
 			System.err.println("Error during render frame: " + e.getMessage());
@@ -127,42 +155,95 @@ public class Main {
 		}
 	}
 
+	private void renderWireframeOverlay () {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		shader.setVector3f("objectColor", WIREFRAME_COLOR);
+		getCurrentMesh().render();
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	}
+
 	private void updateRotation () {
 		rotation += ROTATION_SPEED;
 
-		// Prevent float overflow by wrapping at 360 degrees
 		if (rotation >= 360.0f) {
 			rotation -= 360.0f;
 		}
 	}
 
 	private Matrix4f createModelMatrix () {
-		float primaryRotationRad = (float) Math.toRadians(rotation);
-		float secondaryRotationRad = (float) Math.toRadians(rotation * SECONDARY_ROTATION_MULTIPLIER);
+		float rotationRad = (float) Math.toRadians(rotation);
 
-		return new Matrix4f()
-			.rotate(primaryRotationRad, 1.0f, 0.5f, 0.0f)
-			.rotate(secondaryRotationRad, 0.0f, 1.0f, 0.0f);
+		if (currentShape == Shape.CUBE) {
+			// Cube: dual-axis rotation (more interesting)
+			return new Matrix4f()
+				.rotate(
+					rotationRad,
+					CUBE_PRIMARY_ROTATION_AXIS.x, CUBE_PRIMARY_ROTATION_AXIS.y, CUBE_PRIMARY_ROTATION_AXIS.z
+				)
+				.rotate(
+					rotationRad * CUBE_SECONDARY_ROTATION_MULTIPLIER,
+					CUBE_SECONDARY_ROTATION_AXIS.x, CUBE_SECONDARY_ROTATION_AXIS.y, CUBE_SECONDARY_ROTATION_AXIS.z
+				);
+		} else {
+			// Sphere: simple Y-axis rotation (clean)
+			return new Matrix4f()
+				.rotate(
+					rotationRad,
+					SPHERE_ROTATION_AXIS.x, SPHERE_ROTATION_AXIS.y, SPHERE_ROTATION_AXIS.z
+				);
+		}
 	}
 
-	private void bindShaderAndSetUniforms (Matrix4f modelMatrix) {
+	private void bindShaderAndSetUniforms (Matrix4f modelMatrix, Matrix4f viewMatrix, Vector3f lightPos, Vector3f viewPos) {
 		shader.bind();
 		shader.setMatrix4f("model", modelMatrix);
 		shader.setMatrix4f("view", viewMatrix);
 		shader.setMatrix4f("projection", projectionMatrix);
-		shader.setVector3f("color", CUBE_COLOR);
 
-		shader.setVector3f("objectColor", objectColor);
-		shader.setVector3f("lightColor", lightColor);
+		shader.setVector3f("objectColor", OBJECT_COLOR);
+		shader.setVector3f("lightColor", LIGHT_COLOR);
 		shader.setVector3f("lightPos", lightPos);
 		shader.setVector3f("viewPos", viewPos);
 	}
 
+	private Mesh getCurrentMesh () {
+		return currentShape == Shape.CUBE ? cubeMesh : sphereMesh;
+	}
+
+	private void switchShape () {
+		currentShape = (currentShape == Shape.CUBE) ? Shape.ICOSPHERE : Shape.CUBE;
+		System.out.println("Switched to: " + currentShape);
+	}
+
+	private void onMouseMove (double deltaX, double deltaY) {
+		camera.rotate(
+			(float) deltaX,
+			(float) deltaY,
+			CAMERA_ROTATION_SENSITIVITY
+		);
+	}
+
+	private void onMouseScroll (double offsetY) {
+		camera.zoom((float) offsetY * CAMERA_ZOOM_SENSITIVITY);
+	}
+
+	private void onKeyPress (int key, int action) {
+		// SPACE key to switch shapes
+		if (key == 32 && action == 1) {  // GLFW_KEY_SPACE = 32, GLFW_PRESS = 1
+			switchShape();
+		}
+	}
+
 	private void cleanup () {
 		try {
-			if (cube != null) {
+			if (cubeMesh != null) {
 				System.out.println("Cleaning up cube mesh");
-				cube.cleanup();
+				cubeMesh.cleanup();
+			}
+
+			if (sphereMesh != null) {
+				System.out.println("Cleaning up sphere mesh");
+				sphereMesh.cleanup();
 			}
 
 			if (shader != null) {
