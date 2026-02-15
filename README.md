@@ -1,5 +1,3 @@
-
-https://github.com/user-attachments/assets/33433b0b-63a2-414e-af17-4691435cb775
 # GeometryForge
 
 **Um motor de renderização 3D em tempo real construído do zero utilizando Java e OpenGL**
