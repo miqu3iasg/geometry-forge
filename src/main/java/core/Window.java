@@ -17,6 +17,7 @@ public class Window {
 	private static final int WINDOW_WIDTH = 800;
 	private static final int WINDOW_HEIGHT = 600;
 	private static final String WINDOW_TITLE = "Geometry Forge";
+
 	private static final int OPENGL_VERSION_MAJOR = 3;
 	private static final int OPENGL_VERSION_MINOR = 3;
 

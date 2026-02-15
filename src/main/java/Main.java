@@ -10,44 +10,61 @@ import org.joml.Vector3f;
 
 import static org.lwjgl.opengl.GL11C.*;
 
+/**
+ * Main application entry point for 3D shape rendering with interactive camera controls.
+ * <p>
+ * Supports toggling between cube and icosphere geometries with configurable lighting
+ * and rotation behaviors. Camera can be controlled via mouse drag (rotation) and
+ * scroll (zoom).
+ */
 public class Main {
+
+	// Constants: Rendering Pipeline
 
 	private static final float FIELD_OF_VIEW = 45.0f;
 	private static final float NEAR_PLANE = 0.1f;
 	private static final float FAR_PLANE = 100.0f;
-	private static final float ROTATION_SPEED = 0.5f;
-	private static final Vector3f FIXED_LIGHT_POSITION = new Vector3f(8.0f, 8.0f, 5.0f);
-	private static final Vector3f WIREFRAME_COLOR = new Vector3f(0.1f, 0.1f, 0.15f);
 
-	private final static Vector3f LIGHT_COLOR = new Vector3f(1.0f, 1.0f, 1.0f); // white light
-	private final static Vector3f OBJECT_COLOR = new Vector3f(0.2f, 0.6f, 1.0f); // blue
+	// Constants: Camera Configuration
 
-	private static final int ICOSPHERE_SUBDIVISIONS = 3;
-
-	private Shape currentShape = Shape.ICOSPHERE;
-
-	// Camera configuration
 	private static final float CAMERA_INITIAL_RADIUS = 2.5f;
 	private static final float CAMERA_INITIAL_THETA = (float) Math.PI / 3;
 	private static final float CAMERA_INITIAL_PHI = (float) Math.PI / 4;
 	private static final float CAMERA_ROTATION_SENSITIVITY = 0.005f;
 	private static final float CAMERA_ZOOM_SENSITIVITY = 0.5f;
 
+	// Constants: Lighting & Materials
 
-	// Rotation axis vectors
+	private static final Vector3f FIXED_LIGHT_POSITION = new Vector3f(8.0f, 8.0f, 5.0f);
+	private static final Vector3f LIGHT_COLOR = new Vector3f(1.0f, 1.0f, 1.0f);
+	private static final Vector3f OBJECT_COLOR = new Vector3f(0.2f, 0.6f, 1.0f);
+	private static final Vector3f WIREFRAME_COLOR = new Vector3f(0.1f, 0.1f, 0.15f);
+
+	// Constants: Geometry & Animation
+
+	private static final int ICOSPHERE_SUBDIVISIONS = 3;
+	private static final float ROTATION_SPEED = 0.5f;
+
 	private static final Vector3f CUBE_PRIMARY_ROTATION_AXIS = new Vector3f(1.0f, 0.5f, 0.0f).normalize();
 	private static final Vector3f CUBE_SECONDARY_ROTATION_AXIS = new Vector3f(0.0f, 1.0f, 0.0f);
-	private static final Vector3f SPHERE_ROTATION_AXIS = new Vector3f(0.0f, 1.0f, 0.0f);
-
-	// Rotation multipliers
 	private static final float CUBE_SECONDARY_ROTATION_MULTIPLIER = 0.5f;
 
+	private static final Vector3f SPHERE_ROTATION_AXIS = new Vector3f(0.0f, 1.0f, 0.0f);
+
+	// State
+
+	private Shape currentShape = Shape.ICOSPHERE;
 	private float rotation = 0.0f;
+
+	// Resources
+
 	private ShaderProgram shader;
 	private Mesh cubeMesh;
 	private Mesh sphereMesh;
-	private Matrix4f projectionMatrix;
 	private Camera camera;
+	private Matrix4f projectionMatrix;
+
+	// Application Lifecycle
 
 	public static void main (String[] args) {
 		System.out.println("Starting application...");
@@ -70,7 +87,6 @@ public class Main {
 			window.setInitCallback(() -> {
 				try {
 					System.out.println("Initializing rendering resources");
-
 					init();
 				} catch (Exception e) {
 					throw new RuntimeException("Failed to initialize OpenGL resources", e);
@@ -118,119 +134,8 @@ public class Main {
 		} catch (Exception e) {
 			System.err.println("Failed to initialize rendering resources: " + e.getMessage());
 			e.printStackTrace();
-
 			cleanup();
-
 			throw new RuntimeException("Initialization failed", e);
-		}
-	}
-
-	private Matrix4f createProjectionMatrix () {
-		float aspectRatio = (float) Window.getWidth() / Window.getHeight();
-		float fovRadians = (float) Math.toRadians(FIELD_OF_VIEW);
-
-		return new Matrix4f().perspective(fovRadians, aspectRatio, NEAR_PLANE, FAR_PLANE);
-	}
-
-	private void render () {
-		try {
-			updateRotation();
-
-			Matrix4f modelMatrix = createModelMatrix();
-			Matrix4f viewMatrix = camera.getViewMatrix();
-
-			Vector3f lightPos = currentShape == Shape.CUBE ? camera.getPosition() : FIXED_LIGHT_POSITION;
-			Vector3f viewPos = camera.getPosition();
-
-			bindShaderAndSetUniforms(modelMatrix, viewMatrix, lightPos, viewPos);
-
-			getCurrentMesh().render();
-
-			renderWireframeOverlay();
-
-			shader.unbind();
-		} catch (Exception e) {
-			System.err.println("Error during render frame: " + e.getMessage());
-			e.printStackTrace();
-		}
-	}
-
-	private void renderWireframeOverlay () {
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		shader.setVector3f("objectColor", WIREFRAME_COLOR);
-		getCurrentMesh().render();
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	}
-
-	private void updateRotation () {
-		rotation += ROTATION_SPEED;
-
-		if (rotation >= 360.0f) {
-			rotation -= 360.0f;
-		}
-	}
-
-	private Matrix4f createModelMatrix () {
-		float rotationRad = (float) Math.toRadians(rotation);
-
-		if (currentShape == Shape.CUBE) {
-			// Cube: dual-axis rotation (more interesting)
-			return new Matrix4f()
-				.rotate(
-					rotationRad,
-					CUBE_PRIMARY_ROTATION_AXIS.x, CUBE_PRIMARY_ROTATION_AXIS.y, CUBE_PRIMARY_ROTATION_AXIS.z
-				)
-				.rotate(
-					rotationRad * CUBE_SECONDARY_ROTATION_MULTIPLIER,
-					CUBE_SECONDARY_ROTATION_AXIS.x, CUBE_SECONDARY_ROTATION_AXIS.y, CUBE_SECONDARY_ROTATION_AXIS.z
-				);
-		} else {
-			// Sphere: simple Y-axis rotation (clean)
-			return new Matrix4f()
-				.rotate(
-					rotationRad,
-					SPHERE_ROTATION_AXIS.x, SPHERE_ROTATION_AXIS.y, SPHERE_ROTATION_AXIS.z
-				);
-		}
-	}
-
-	private void bindShaderAndSetUniforms (Matrix4f modelMatrix, Matrix4f viewMatrix, Vector3f lightPos, Vector3f viewPos) {
-		shader.bind();
-		shader.setMatrix4f("model", modelMatrix);
-		shader.setMatrix4f("view", viewMatrix);
-		shader.setMatrix4f("projection", projectionMatrix);
-
-		shader.setVector3f("objectColor", OBJECT_COLOR);
-		shader.setVector3f("lightColor", LIGHT_COLOR);
-		shader.setVector3f("lightPos", lightPos);
-		shader.setVector3f("viewPos", viewPos);
-	}
-
-	private Mesh getCurrentMesh () {
-		return currentShape == Shape.CUBE ? cubeMesh : sphereMesh;
-	}
-
-	private void switchShape () {
-		currentShape = (currentShape == Shape.CUBE) ? Shape.ICOSPHERE : Shape.CUBE;
-		System.out.println("Switched to: " + currentShape);
-	}
-
-	private void onMouseMove (double deltaX, double deltaY) {
-		camera.rotate(
-			(float) deltaX,
-			(float) deltaY,
-			CAMERA_ROTATION_SENSITIVITY
-		);
-	}
-
-	private void onMouseScroll (double offsetY) {
-		camera.zoom((float) offsetY * CAMERA_ZOOM_SENSITIVITY);
-	}
-
-	private void onKeyPress (int key, int action) {
-		// SPACE key to switch shapes
-		if (key == 32 && action == 1) {  // GLFW_KEY_SPACE = 32, GLFW_PRESS = 1
-			switchShape();
 		}
 	}
 
@@ -257,5 +162,110 @@ public class Main {
 			System.err.println("Error during cleanup: " + e.getMessage());
 			e.printStackTrace();
 		}
+	}
+
+	private void render () {
+		try {
+			updateRotation();
+
+			Matrix4f modelMatrix = createModelMatrix();
+			Matrix4f viewMatrix = camera.getViewMatrix();
+			Vector3f lightPos = getLightPosition();
+			Vector3f viewPos = camera.getPosition();
+
+			bindShaderAndSetUniforms(modelMatrix, viewMatrix, lightPos, viewPos);
+			getCurrentMesh().render();
+			renderWireframeOverlay();
+			shader.unbind();
+
+		} catch (Exception e) {
+			System.err.println("Error during render frame: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+
+	private void renderWireframeOverlay () {
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		shader.setVector3f("objectColor", WIREFRAME_COLOR);
+		getCurrentMesh().render();
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	}
+
+	// Input Handlers
+
+	private void onMouseMove (double deltaX, double deltaY) {
+		camera.rotate((float) deltaX, (float) deltaY, CAMERA_ROTATION_SENSITIVITY);
+	}
+
+	private void onMouseScroll (double offsetY) {
+		camera.zoom((float) offsetY * CAMERA_ZOOM_SENSITIVITY);
+	}
+
+	private void onKeyPress (int key, int action) {
+		if (key == 32 && action == 1) {  // GLFW_KEY_SPACE = 32, GLFW_PRESS = 1
+			switchShape();
+		}
+	}
+
+	// Rendering Utilities
+
+	private Matrix4f createProjectionMatrix () {
+		float aspectRatio = (float) Window.getWidth() / Window.getHeight();
+		float fovRadians = (float) Math.toRadians(FIELD_OF_VIEW);
+		return new Matrix4f().perspective(fovRadians, aspectRatio, NEAR_PLANE, FAR_PLANE);
+	}
+
+	private Matrix4f createModelMatrix () {
+		float rotationRad = (float) Math.toRadians(rotation);
+
+		if (currentShape == Shape.CUBE) {
+			return new Matrix4f()
+				.rotate(rotationRad,
+					CUBE_PRIMARY_ROTATION_AXIS.x,
+					CUBE_PRIMARY_ROTATION_AXIS.y,
+					CUBE_PRIMARY_ROTATION_AXIS.z)
+				.rotate(rotationRad * CUBE_SECONDARY_ROTATION_MULTIPLIER,
+					CUBE_SECONDARY_ROTATION_AXIS.x,
+					CUBE_SECONDARY_ROTATION_AXIS.y,
+					CUBE_SECONDARY_ROTATION_AXIS.z);
+		}
+
+		return new Matrix4f()
+			.rotate(rotationRad,
+				SPHERE_ROTATION_AXIS.x,
+				SPHERE_ROTATION_AXIS.y,
+				SPHERE_ROTATION_AXIS.z);
+	}
+
+	private void bindShaderAndSetUniforms (Matrix4f modelMatrix, Matrix4f viewMatrix,
+	                                       Vector3f lightPos, Vector3f viewPos) {
+		shader.bind();
+		shader.setMatrix4f("model", modelMatrix);
+		shader.setMatrix4f("view", viewMatrix);
+		shader.setMatrix4f("projection", projectionMatrix);
+		shader.setVector3f("objectColor", OBJECT_COLOR);
+		shader.setVector3f("lightColor", LIGHT_COLOR);
+		shader.setVector3f("lightPos", lightPos);
+		shader.setVector3f("viewPos", viewPos);
+	}
+
+	private Vector3f getLightPosition () {
+		return currentShape == Shape.CUBE ? camera.getPosition() : FIXED_LIGHT_POSITION;
+	}
+
+	private Mesh getCurrentMesh () {
+		return currentShape == Shape.CUBE ? cubeMesh : sphereMesh;
+	}
+
+	private void updateRotation () {
+		rotation += ROTATION_SPEED;
+		if (rotation >= 360.0f) {
+			rotation -= 360.0f;
+		}
+	}
+
+	private void switchShape () {
+		currentShape = (currentShape == Shape.CUBE) ? Shape.ICOSPHERE : Shape.CUBE;
+		System.out.println("Switched to: " + currentShape);
 	}
 }
